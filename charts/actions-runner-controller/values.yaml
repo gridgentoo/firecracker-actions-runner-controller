@@ -15,7 +15,7 @@ image:
   dindSidecarRepositoryAndTag: "docker:dind"
   pullPolicy: IfNotPresent
 
-kube_rbac_proxy:
+kubeRBACProxy:
   image:
     repository: gcr.io/kubebuilder/kube-rbac-proxy
     tag: v0.4.1
