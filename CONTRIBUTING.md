@@ -60,7 +60,8 @@ KUBECONFIG=path/to/kubeconfig \
   INSTALLATION_ID=*** \
   ACCEPTANCE_TEST_SECRET_TYPE=token \
   make docker-build acceptance/setup \
-       acceptance/deploy \
+       acceptance/deploy-controller \ 
+       acceptance/deploy-runners \
        acceptance/tests
 ```
 
@@ -82,7 +83,7 @@ To make your development cycle faster, use the below command to update deploy an
 
 VERSION=controller1 \
   RUNNER_TAG=runner1 \
-  make acceptance/pull acceptance/kind docker-build acceptance/load acceptance/deploy
+  make acceptance/pull acceptance/kind docker-build acceptance/load acceptance/deploy-controller acceptance/deploy-runners
 ```
 
 If you've already deployed actions-runner-controller and only want to recreate pods to use the newer image, you can run:
