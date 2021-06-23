@@ -6,6 +6,7 @@ tpe=${ACCEPTANCE_TEST_SECRET_TYPE}
 
 VALUES_FILE=${VALUES_FILE:-$(dirname $0)/values.yaml}
 
+echo "Setup controller secret before deployment"
 if [ "${tpe}" == "token" ]; then
   if ! kubectl get secret controller-manager -n actions-runner-system >/dev/null; then
     kubectl create secret generic controller-manager \
@@ -25,7 +26,9 @@ fi
 
 tool=${ACCEPTANCE_TEST_DEPLOYMENT_TOOL}
 
+echo "Deploy controller ..."
 if [ "${tool}" == "helm" ]; then
+  echo "Helm selected as deployment tool"
   helm upgrade --install actions-runner-controller \
     charts/actions-runner-controller \
     -n actions-runner-system \
@@ -38,36 +41,9 @@ if [ "${tool}" == "helm" ]; then
   kubectl apply -f charts/actions-runner-controller/crds
   kubectl -n actions-runner-system wait deploy/actions-runner-controller --for condition=available --timeout 60s
 else
+  echo "kubectl selected as deployment tool"
   kubectl apply \
     -n actions-runner-system \
     -f release/actions-runner-controller.yaml
   kubectl -n actions-runner-system wait deploy/controller-manager --for condition=available --timeout 120s
-fi
-
-# Adhocly wait for some time until actions-runner-controller's admission webhook gets ready
-sleep 20
-
-if [ -n "${TEST_REPO}" ]; then
-  if [ -n "USE_RUNNERSET" ]; then
-      cat acceptance/testdata/repo.runnerset.yaml | envsubst | kubectl apply -f -
-      cat acceptance/testdata/repo.runnerset.hra.yaml | envsubst | kubectl apply -f -
-  else
-    echo 'Deploying runnerdeployment and hra. Set USE_RUNNERSET if you want to deploy runnerset instead.'
-    cat acceptance/testdata/repo.runnerdeploy.yaml | envsubst | kubectl apply -f -
-    cat acceptance/testdata/repo.hra.yaml | envsubst | kubectl apply -f -
-  fi
-else
-  echo 'Skipped deploying runnerdeployment and hra. Set TEST_REPO to "yourorg/yourrepo" to deploy.'
-fi
-
-if [ -n "${TEST_ORG}" ]; then
-  cat acceptance/testdata/org.runnerdeploy.yaml | envsubst | kubectl apply -f -
-
-  if [ -n "${TEST_ORG_REPO}" ]; then
-    cat acceptance/testdata/org.hra.yaml | envsubst | kubectl apply -f -
-  else
-    echo 'Skipped deploying organizational hra. Set TEST_ORG_REPO to "yourorg/yourrepo" to deploy.'
-  fi
-else
-  echo 'Skipped deploying organizational runnerdeployment. Set TEST_ORG to deploy.'
 fi

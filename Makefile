@@ -1,3 +1,4 @@
+# Environment / Test Config
 ifdef DOCKER_USER
 	NAME ?= ${DOCKER_USER}/actions-runner-controller
 else
@@ -6,7 +7,7 @@ endif
 DOCKER_USER ?= $(shell echo ${NAME} | cut -d / -f1)
 VERSION ?= latest
 RUNNER_NAME ?= ${DOCKER_USER}/actions-runner
-RUNNER_TAG  ?= ${VERSION}
+RUNNER_TAG ?= ${VERSION}
 TEST_REPO ?= ${DOCKER_USER}/actions-runner-controller
 TEST_ORG ?=
 TEST_ORG_REPO ?=
@@ -15,6 +16,7 @@ USE_RUNNERSET ?=
 KUBECONTEXT ?= kind-acceptance
 CLUSTER ?= acceptance
 CERT_MANAGER_VERSION ?= v1.1.1
+KUBE_RBAC_PROXY_VERSION ?= v0.10.0
 
 # From https://github.com/VictoriaMetrics/operator/pull/44
 YAML_DROP=$(YQ) delete --inplace
@@ -162,7 +164,7 @@ acceptance: release/clean acceptance/pull docker-build release
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=token make acceptance/run
 	ACCEPTANCE_TEST_DEPLOYMENT_TOOL=helm ACCEPTANCE_TEST_SECRET_TYPE=app make acceptance/run
 
-acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy acceptance/tests acceptance/teardown
+acceptance/run: acceptance/kind acceptance/load acceptance/setup acceptance/deploy-controller acceptance/deploy-runners acceptance/tests acceptance/teardown
 
 acceptance/kind:
 	kind create cluster --name ${CLUSTER} --config acceptance/kind.yaml
@@ -172,39 +174,51 @@ acceptance/kind:
 # See https://kind.sigs.k8s.io/docs/user/known-issues/#docker-installed-with-snap
 acceptance/load:
 	kind load docker-image ${NAME}:${VERSION} --name ${CLUSTER}
-	kind load docker-image quay.io/brancz/kube-rbac-proxy:v0.10.0 --name ${CLUSTER}
+	kind load docker-image quay.io/brancz/kube-rbac-proxy:${KUBE_RBAC_PROXY_VERSION} --name ${CLUSTER}
 	kind load docker-image ${RUNNER_NAME}:${RUNNER_TAG} --name ${CLUSTER}
 	kind load docker-image docker:dind --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
-	kind load docker-image quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION) --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-controller:${CERT_MANAGER_VERSION} --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION} --name ${CLUSTER}
+	kind load docker-image quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION} --name ${CLUSTER}
 	kubectl cluster-info --context ${KUBECONTEXT}
 
 # Pull the docker images for acceptance
 acceptance/pull:
-	docker pull quay.io/brancz/kube-rbac-proxy:v0.10.0
+	docker pull quay.io/brancz/kube-rbac-proxy:${KUBE_RBAC_PROXY_VERSION}
 	docker pull docker:dind
-	docker pull quay.io/jetstack/cert-manager-controller:$(CERT_MANAGER_VERSION)
-	docker pull quay.io/jetstack/cert-manager-cainjector:$(CERT_MANAGER_VERSION)
-	docker pull quay.io/jetstack/cert-manager-webhook:$(CERT_MANAGER_VERSION)
+	docker pull quay.io/jetstack/cert-manager-controller:${CERT_MANAGER_VERSION}
+	docker pull quay.io/jetstack/cert-manager-cainjector:${CERT_MANAGER_VERSION}
+	docker pull quay.io/jetstack/cert-manager-webhook:${CERT_MANAGER_VERSION}
 
 acceptance/setup:
-	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml	#kubectl create namespace actions-runner-system
+	kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml
 	kubectl -n cert-manager wait deploy/cert-manager-cainjector --for condition=available --timeout 90s
 	kubectl -n cert-manager wait deploy/cert-manager-webhook --for condition=available --timeout 60s
 	kubectl -n cert-manager wait deploy/cert-manager --for condition=available --timeout 60s
 	kubectl create namespace actions-runner-system || true
-	# Adhocly wait for some time until cert-manager's admission webhook gets ready
-	sleep 5
+	@echo "Wait 10s to allow cert-manager to be ready, sleep start : $(shell date +%FT%T%z)"
+	sleep 10
 
 acceptance/teardown:
 	kind delete cluster --name ${CLUSTER}
 
-acceptance/deploy:
-	NAME=${NAME} DOCKER_USER=${DOCKER_USER} VERSION=${VERSION} RUNNER_NAME=${RUNNER_NAME} RUNNER_TAG=${RUNNER_TAG} TEST_REPO=${TEST_REPO} \
-	TEST_ORG=${TEST_ORG} TEST_ORG_REPO=${TEST_ORG_REPO} SYNC_PERIOD=${SYNC_PERIOD} \
+acceptance/deploy-controller:
+	DOCKER_USER=${DOCKER_USER} \
+	NAME=${NAME} \
+	VERSION=${VERSION} \
+	SYNC_PERIOD=${SYNC_PERIOD} \
+	acceptance/deploy-controller.sh
+	@echo "Wait 20s to allow action-runner-controller's admission webhook to be ready, sleep start : $(shell date +%FT%T%z)"
+	sleep 20
+
+acceptance/deploy-runners:
+	RUNNER_NAME=${RUNNER_NAME} \
+	RUNNER_TAG=${RUNNER_TAG} \
+	TEST_REPO=${TEST_REPO} \
+	TEST_ORG=${TEST_ORG} \
+	TEST_ORG_REPO=${TEST_ORG_REPO} \
 	USE_RUNNERSET=${USE_RUNNERSET} \
-	acceptance/deploy.sh
+	acceptance/deploy-runners.sh
 
 acceptance/tests:
 	acceptance/checks.sh
