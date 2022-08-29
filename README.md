@@ -1211,8 +1211,9 @@ spec:
 
 ### Runner Graceful Termination
 
-As of ARC 0.26.0 (unreleased as of 2022/08/27), rootless/rootful dind runners can only wait for 15 seconds by default on pod termination.
-This can be in two scenarios:
+As of ARC 0.26.0 (unreleased as of 2022/08/27), runners can only wait for 15 seconds by default on pod termination.
+
+This can be problematic in two scenarios:
 
 - Scenario 1 - RunnerSet-only: You're triggering updates other than replica changes to `RunnerSet` very often- With current implementation, every update except `replicas` change to RunnerSet may result in terminating the in-progress workflow jobs to fail.
 - Scenario 2 - RunnerDeployment and RunnerSet: You have another Kubernetes controller that evicts runner pods directly, not consulting ARC.
@@ -1240,14 +1241,12 @@ The idea is two fold:
 
 #### Status and Future of this feature
 
-Note that this feature is currently intended for use with dind runner pods being terminated by other Kubernetes controller and human operators, or those being replaced by ARC RunnerSet controller due to spec change(s) except `replicas`. RunnerDeployment has no issue for the scenario. non-dind runners are affected but this feature does not support those yet.
+Note that this feature is currently intended for use with runner pods being terminated by other Kubernetes controller and human operators, or those being replaced by ARC RunnerSet controller due to spec change(s) except `replicas`. RunnerDeployment has no issue for the scenario. non-dind runners are affected but this feature does not support those yet.
 
 For example, a runner pod can be terminated prematurely by cluster-autoscaler when it's about to terminate the node on cluster scale down.
 All the variants of RunnerDeployment and RunnerSet managed runner pods, including runners with dockerd sidecars, rootless and rootful dind runners are affected by it. For dind runner pods only, you can use this feature to fix or alleviate the issue.
 
-This feature does not support runners with dockerd sidecars yet. We aren't sure if it's worth the effort to add support for runners with dockerd sidecars, as it may result in forking the Docker's official `dind` image to have our own entrypoint.
-
-Also, to be clear, an increase/decrease in the desired replicas of RunnerDeployment and RunnerSet will never result in worklfow jobs being termianted prematurely.
+To be clear, an increase/decrease in the desired replicas of RunnerDeployment and RunnerSet will never result in worklfow jobs being termianted prematurely.
 That's because it's handled BEFORE the runner pod is terminated, by ARC respective controller.
 
 For anyone interested in improving it, adding a dedicated pod finalizer for this issue will never work.
@@ -1268,10 +1267,7 @@ If you have any insights about the matter, chime in to the development of ARC!
 That's why we still rely on ARC's own graceful termination logic in Runner controller for the spec change and replica increase/decrease of RunnerDeployment and
 replica increase/decrease of RunnerSet, even though we now have the entrypoint based graceful stop handler.
 
-Our current plan is two-fold:
-
-- First, we want to improve the RunnerSet to have the same logic as the Runner controller so that you don't need this feature based on the SIGTERM handler for the spec change of RunnerSet.
-- Second, we want to improve this SIGTERM handler based solution to also support runners with dockerd sidecars.
+Our plan is to improve the RunnerSet to have the same logic as the Runner controller so that you don't need this feature based on the SIGTERM handler for the spec change of RunnerSet.
 
 ### Custom Volume mounts
 
