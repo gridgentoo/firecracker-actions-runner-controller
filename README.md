@@ -1,3 +1,6 @@
+Оригинальный репозитарий   
+https://github.com/actions-runner-controller/actions-runner-controller   
+
 # actions-runner-controller (ARC)
 
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6061/badge)](https://bestpractices.coreinfrastructure.org/projects/6061)
